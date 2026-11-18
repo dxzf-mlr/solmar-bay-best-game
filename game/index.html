@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmar Bay — an open-world crime game</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1410; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 5; }
+  .panel-box {
+    background: rgba(10, 12, 16, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    padding: 8px 12px;
+    backdrop-filter: blur(2px);
+  }
+  #stats { position: absolute; top: 14px; left: 14px; font-size: 20px; line-height: 1.35; }
+  #money { color: #ffd94a; font-weight: 700; }
+  #rep { color: #9fd8ff; font-size: 14px; }
+  #wanted { position: absolute; top: 14px; right: 14px; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 3px; color: #666; text-shadow: 0 0 6px rgba(0,0,0,0.7); }
+  #stars.hot { color: #ff5252; }
+  #health-wrap { position: absolute; left: 14px; bottom: 14px; width: 220px; }
+  #health-bar { height: 14px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25); border-radius: 7px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #7ee787; transition: width 0.2s; }
+  #health-fill.low { background: #ff5252; }
+  #health-text { font-size: 13px; margin-top: 3px; color: #ddd; }
+  #speed { position: absolute; right: 14px; bottom: 208px; font-size: 26px; font-weight: 700; color: #fff; text-shadow: 0 1px 4px #000; display: none; }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); max-width: 46%; font-size: 16px; text-align: center; }
+  #prompt { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); font-size: 16px; display: none; }
+  #message { position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%); font-size: 17px; color: #ffe9a8; display: none; white-space: nowrap; }
+  #progress-wrap { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); width: 280px; height: 10px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; display: none; overflow: hidden; }
+  #progress-fill { height: 100%; width: 0%; background: #ffd94a; }
+  #minimap { position: absolute; right: 14px; bottom: 14px; width: 180px; height: 180px; border: 2px solid rgba(255,255,255,0.35); border-radius: 8px; background: #20262b; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; display: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+  #damage-flash { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,0.55) 100%); opacity: 0; transition: opacity 0.3s; }
+  #controls-hint { position: absolute; left: 14px; bottom: 64px; font-size: 12px; color: rgba(255,255,255,0.65); line-height: 1.5; }
+
+  /* ---------- Menus ---------- */
+  .menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 10;
+    background: linear-gradient(180deg, rgba(20,10,4,0.55) 0%, rgba(20,10,4,0.82) 100%); }
+  .menu-card { max-width: 620px; width: 92%; text-align: center; padding: 34px 30px;
+    background: rgba(12, 14, 18, 0.78); border: 1px solid rgba(255, 217, 74, 0.35); border-radius: 14px; }
+  .menu-card h1 { font-size: 54px; letter-spacing: 2px; color: #ffd94a; text-shadow: 0 3px 0 #7a4a12, 0 6px 24px rgba(0,0,0,0.8); }
+  .menu-card h2 { font-size: 30px; color: #ffd94a; margin-bottom: 10px; }
+  .menu-card .tagline { font-size: 15px; color: #ffb36b; letter-spacing: 3px; text-transform: uppercase; margin: 6px 0 18px; }
+  .menu-card p { font-size: 15px; line-height: 1.6; color: #e8e2d5; margin-bottom: 14px; }
+  .menu-card .controls { font-size: 13px; color: #b9c2cc; line-height: 1.9; text-align: left; display: inline-block; margin-bottom: 18px; }
+  .menu-card .controls b { color: #fff; }
+  button { pointer-events: auto; cursor: pointer; font-size: 17px; font-weight: 700; color: #1a1206;
+    background: linear-gradient(180deg, #ffe27a, #f5b81e); border: none; border-radius: 8px;
+    padding: 12px 26px; margin: 5px; box-shadow: 0 3px 0 #8a6410; }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: translateY(2px); box-shadow: none; }
+  button.secondary { background: linear-gradient(180deg, #cfd6dd, #9aa5b1); color: #17202a; box-shadow: 0 3px 0 #5a646e; }
+  #error { position: fixed; left: 10px; bottom: 10px; z-index: 50; display: none; color: #ff8080; background: rgba(0,0,0,0.7); padding: 6px 10px; font-size: 13px; border-radius: 6px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<div id="hud">
+  <div id="damage-flash"></div>
+  <div id="stats" class="panel-box">
+    <div id="money">$250</div>
+    <div id="rep">REP 0</div>
+  </div>
+  <div id="wanted" class="panel-box"><div id="stars">☆☆☆☆☆</div></div>
+  <div id="objective" class="panel-box">Welcome to Solmar Bay</div>
+  <div id="health-wrap">
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="health-text">100</div>
+  </div>
+  <div id="speed">0 km/h</div>
+  <div id="prompt" class="panel-box"></div>
+  <div id="message" class="panel-box"></div>
+  <div id="progress-wrap"><div id="progress-fill"></div></div>
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="crosshair"></div>
+  <div id="controls-hint">WASD move / drive &nbsp;·&nbsp; Mouse look &nbsp;·&nbsp; E enter car &nbsp;·&nbsp; F punch / shoot<br>Shift run &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; Esc pause &nbsp;·&nbsp; M mute</div>
+</div>
+
+<div id="menu-start" class="menu" style="display:flex">
+  <div class="menu-card">
+    <h1>SOLMAR BAY</h1>
+    <div class="tagline">Sun · Sea · Sin · Seven Jobs</div>
+    <p>Dana Cruz drives for a living in a golden-hour city of beaches, boardwalks and bad decisions.
+       Mama Rosa has seven jobs for her — courier runs, a repo, a getaway, a smash and grab,
+       a harbor deal, a long con, and one last heist. Steal cars, outrun the law, and get paid.</p>
+    <div class="controls">
+      <b>WASD</b> walk / drive &nbsp; <b>Mouse</b> look &nbsp; <b>Shift</b> run<br>
+      <b>E</b> enter / exit car &nbsp; <b>F</b> punch or shoot &nbsp; <b>Space</b> handbrake<br>
+      <b>Esc</b> pause &nbsp; <b>M</b> mute &nbsp; Follow the yellow beacon to each job.
+    </div>
+    <div>
+      <button id="btn-new">New Game</button>
+      <button id="btn-continue" class="secondary">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="menu-pause" class="menu">
+  <div class="menu-card">
+    <h2>Paused</h2>
+    <p>The city waits. Your save is already written.</p>
+    <div>
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart-mission" class="secondary">Abandon Job</button>
+      <button id="btn-mute" class="secondary">Mute (M)</button>
+      <button id="btn-quit-to-menu" class="secondary">Quit to Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="menu-complete" class="menu">
+  <div class="menu-card">
+    <h2 id="complete-title">Job Done</h2>
+    <p id="complete-text"></p>
+    <div><button id="btn-next-mission">Next Job</button></div>
+  </div>
+</div>
+
+<div id="menu-failed" class="menu">
+  <div class="menu-card">
+    <h2 id="failed-title">Job Failed</h2>
+    <p id="failed-text"></p>
+    <div>
+      <button id="btn-retry-mission">Try Again</button>
+      <button id="btn-fail-menu" class="secondary">Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="menu-wasted" class="menu">
+  <div class="menu-card">
+    <h2>WASTED</h2>
+    <p>Dana got taken down. The clinic patched her up — for a fee. The city keeps moving.</p>
+    <div>
+      <button id="btn-respawn">Get Back Up (-$100)</button>
+      <button id="btn-wasted-menu" class="secondary">Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="error"></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
